@@ -169,5 +169,112 @@ In Apache Camel, an endpoint is identified by an **endpoint URI**, which contain
   Specifies where to send the messages, including configurations or the destination name.
 
 
+## Chapter 8. Message Routing
+
+The message routing patterns describe various ways of linking message channels together. This includes various algorithms that can be applied to the message stream (without modifying the body of the message).
+### 8.1. Content-Based Router
+A content-based router, shown in Figure 8.1, “Content-Based Router Pattern”, enables you to route messages to the appropriate destination based on the message contents.
+
+![LOGO ]( https://access.redhat.com/webassets/avalon/d/Red_Hat_Fuse-7.5-Apache_Camel_Development_Guide-en-US/images/fde359fba72016f65226a95d9a6e163c/content_based_router.gif "OpenAI")
+
+#### Java DSL example 
+The following example shows how to route a request from an input, seda:a, endpoint to either seda:b, queue:c, or seda:d depending on the evaluation of various predicate expressions:
+``` java
+RouteBuilder builder = new RouteBuilder() {
+    public void configure() {
+        from("seda:a").choice()
+          .when(header("foo").isEqualTo("bar")).to("seda:b")
+          .when(header("foo").isEqualTo("cheese")).to("seda:c")
+          .otherwise().to("seda:d");
+    }
+};
+```
+#### XML configuration example
+The following example shows how to configure the same route in XML:
+```XML
+<camelContext id="buildSimpleRouteWithChoice" xmlns="http://camel.apache.org/schema/spring">
+  <route>
+    <from uri="seda:a"/>
+    <choice>
+      <when>
+        <xpath>$foo = 'bar'</xpath>
+        <to uri="seda:b"/>
+      </when>
+      <when>
+        <xpath>$foo = 'cheese'</xpath>
+        <to uri="seda:c"/>
+      </when>
+      <otherwise>
+        <to uri="seda:d"/>
+      </otherwise>
+    </choice>
+  </route>
+</camelContext>
+```
+
+### 8.2. Message Filter
+A message filter is a processor that eliminates undesired messages based on specific criteria. In Apache Camel, the message filter pattern, shown in Figure 8.2, “Message Filter Pattern”, is implemented by the filter() Java DSL command. The filter() command takes a single predicate argument, which controls the filter. When the predicate is true, the incoming message is allowed to proceed, and when the predicate is false, the incoming message is blocked.
 
 
+![LOGO ](https://access.redhat.com/webassets/avalon/d/Red_Hat_Fuse-7.5-Apache_Camel_Development_Guide-en-US/images/d8db74c904cf11fd10b5b11794cb06b9/message_filter.gif "OpenAI")
+
+
+#### Java DSL Example – Filtering Orders
+
+Imagine you have a system that processes incoming orders, but you only want to process orders that are marked as priority or orders where the total amount is greater than 1000.
+
+Here’s how you can define such a route in Java DSL:
+``` java
+RouteBuilder builder = new RouteBuilder() {
+    public void configure() {
+        from("seda:incomingOrders")
+            .filter(header("orderType").isEqualTo("priority")
+                .or()
+                .xpath("/order/totalAmount > 1000"))
+            .to("seda:processedOrders");
+    }
+};
+```
+#### XML Example Equivalent
+```XML 
+<route>
+    <from uri="seda:incomingOrders"/>
+    <filter>
+        <or>
+            <simple>${header.orderType} == 'priority'</simple>
+            <xpath>/order/totalAmount &gt; 1000</xpath>
+        </or>
+    </filter>
+    <to uri="seda:processedOrders"/>
+</route>
+``` 
+### 8.3. Recipient List
+A recipient list, shown in Figure 8.3, “Recipient List Pattern”, is a type of router that sends each incoming message to multiple different destinations. In addition, a recipient list typically requires that the list of recipients be calculated at run time.
+
+![LOGO ]( https://access.redhat.com/webassets/avalon/d/Red_Hat_Fuse-7.5-Apache_Camel_Development_Guide-en-US/images/6f0ee85977debd7d8a1f67e5b6cafd8e/recipient_list.gif "OpenAI")
+
+#### Recipient list with fixed destinations 
+
+The simplest kind of recipient list is where the list of destinations is fixed and known in advance, and the exchange pattern is InOnly. In this case, you can hardwire the list of destinations into the to() Java DSL command.
+
+#### Java DSL example
+The following example shows how to route an InOnly exchange from a consumer endpoint, queue:a, to a fixed list of destinations:
+``` java from("seda:a").to("seda:b", "seda:c", "seda:d"); ``` 
+
+#### XML configuration example
+The following example shows how to configure the same route in XML:
+```XML
+<camelContext id="buildStaticRecipientList" xmlns="http://camel.apache.org/schema/spring">
+  <route>
+    <from uri="seda:a"/>
+    <to uri="seda:b"/>
+    <to uri="seda:c"/>
+    <to uri="seda:d"/>
+  </route>
+</camelContext>
+```
+
+#### Recipient list calculated at run time 
+
+In most cases, when you use the recipient list pattern, the list of recipients should be calculated at runtime. To do this use the recipientList() processor, which takes a list of destinations as its sole argument. Because Apache Camel applies a type converter to the list argument, it should be possible to use most standard Java list types (for example, a collection, a list, or an array). For more details about type converters, see Section 34.3, “Built-In Type Converters”.
+The recipients receive a copy of the same exchange instance and Apache Camel executes them sequentially.
